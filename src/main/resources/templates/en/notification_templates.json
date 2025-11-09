@@ -1,0 +1,199 @@
+[
+  {
+    "name": "booking_created_email_user",
+    "subject": "New {{resourceName}} booking created ID: {{resourceId}}. Status: {{status}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_created_email_owner",
+    "subject": "New {{resourceName}} booking created ID: {{resourceId}}. Status: {{status}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_status_email",
+    "subject": "{{resourceName}} booking status updated for ID: {{resourceId}}. New status: {{status}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_update_error",
+    "subject": "{{resourceName}} booking status update failed for ID: {{resourceId}}. New status: {{status}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "otp_sms",
+    "subject": "",
+    "content": "Your OTP is {{otp}}. Valid for 5 minutes.",
+    "type": "SMS"
+  },
+  {
+    "name": "otp_email",
+    "subject": "Your OTP is {{otp}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_created_sms",
+    "subject": "",
+    "content": "New {{resourceName}} booking created (ID: {{resourceId}}). Status: {{status}}. Check app for details.",
+    "type": "SMS"
+  },
+  {
+    "name": "booking_status_sms",
+    "subject": "",
+    "content": "{{resourceName}} booking (ID: {{resourceId}}) updated. New status: {{status}}. Check app for details.",
+    "type": "SMS"
+  },
+  {
+    "name": "job_created_email",
+    "subject": "Job {{title}} (ID: {{jobId}}) Posting Created",
+    "type": "EMAIL"
+  },
+  {
+    "name": "job_created_sms",
+    "subject": "",
+    "content": "Job '{{title}}' (ID: {{jobId}}) created at {{village}}, {{pincode}}. Posted by {{employerName}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "job_updated_email",
+    "subject": "Job {{title}} (ID: {{jobId}}) Posting Updated",
+    "type": "EMAIL"
+  },
+  {
+    "name": "job_updated_sms",
+    "subject": "",
+    "content": "Job '{{title}}' (ID: {{jobId}}) updated at {{village}}, {{pincode}}. Changes made. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "job_application_email",
+    "subject": "{{workerName}} applied for {{title}} (ID: {{jobId}})",
+    "type": "EMAIL"
+  },
+  {
+    "name": "job_application_sms",
+    "subject": "",
+    "content": "{{workerName}} applied for '{{title}}' (ID: {{jobId}}) at {{village}}, {{pincode}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "job_application_status_email",
+    "subject": "Job Application for {{title}} (ID: {{jobId}}) is {{status}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "job_application_status_sms",
+    "subject": "",
+    "content": "Your application for '{{title}}' (ID: {{jobId}}) is {{status}}. Location: {{village}}, {{pincode}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "support_session_escalated",
+    "subject": "Support Query Escalated",
+    "type": "EMAIL"
+  },
+  {
+    "name": "support_session_escalated_sms",
+    "subject": "",
+    "content": "Your support query (ID: {{sessionId}}) is escalated. Our team will contact you soon. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "admin_reply_received",
+    "subject": "Support Team Response",
+    "type": "EMAIL"
+  },
+  {
+    "name": "admin_reply_received_sms",
+    "subject": "",
+    "content": "{{adminName}} responded to your query (ID: {{sessionId}}). Check app for details.",
+    "type": "SMS"
+  },
+  {
+    "name": "review_created_sms",
+    "subject": "",
+    "content": "New review for job (ID: {{jobId}}) by {{userName}}. Rating: {{rating}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "review_created_email",
+    "subject": "New review for job (ID: {{jobId}}). Rating: {{rating}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_reminder_sms",
+    "subject": "",
+    "content": "Reminder for your booking (ID: {{resourceId}}) on {{date}} at {{time}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "booking_reminder_email",
+    "subject": "Booking Reminder for ID: {{resourceId}} ",
+    "type": "EMAIL"
+  },
+  {
+    "name": "review_updated_sms",
+    "subject": "",
+    "content": "Review for job (ID: {{jobId}}) by {{userName}} updated. Rating: {{rating}}. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "review_updated_email",
+    "subject": "Review for job (ID: {{jobId}}) updated. Rating: {{rating}}",
+    "type": "EMAIL"
+  },
+  {
+    "name": "booking_cancellation_sms",
+    "subject": "",
+    "content": "Your booking (ID: {{resourceId}}) has been cancelled. Check app for details.",
+    "type": "SMS"
+  },
+  {
+    "name": "booking_cancellation_email",
+    "subject": "Booking Cancellation",
+    "type": "EMAIL"
+  },
+  {
+    "name": "review_deleted_sms",
+    "subject": "",
+    "content": "Review for job (ID: {{jobId}}) by {{userName}} deleted. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "review_deleted_email",
+    "subject": "Review for job (ID: {{jobId}}) by {{userName}} deleted.",
+    "type": "EMAIL"
+  },
+  {
+    "name": "job_application_withdrawn_sms",
+    "subject": "",
+    "content": "Your application for '{{title}}' (ID: {{jobId}}) has been withdrawn. Check app.",
+    "type": "SMS"
+  },
+  {
+    "name": "job_application_withdrawn_email",
+    "subject": "Job Application Withdrawn",
+    "type": "EMAIL"
+  },
+  {
+    "name": "contact_us_email",
+    "subject": "Contact Us Submission",
+    "type": "EMAIL"
+  },
+  {
+    "name": "contact_us_sms",
+    "subject": "",
+    "content": "Contact Us - {{message}}. We will get back to you soon.",
+    "type": "SMS"
+  },
+  {
+    "name": "contact_us_submission_email",
+    "subject": "Contact Us Response",
+    "type": "EMAIL"
+  },
+  {
+    "name": "new_job",
+    "type": "PUSH",
+    "subject": "New Job Posted Nearby!",
+    "content": "A new job '{{jobTitle}}' has been posted in your area."
+  }
+]
