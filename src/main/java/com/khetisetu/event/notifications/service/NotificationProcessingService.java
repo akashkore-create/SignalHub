@@ -33,7 +33,6 @@ public class NotificationProcessingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final RedisTemplate<String, String> redisTemplate;
     private final MeterRegistry meterRegistry;
-    private final ObjectMapper objectMapper;
 
     private static final String IDEMPOTENCY_KEY = "idempotency:notif:%s";
 
@@ -89,34 +88,57 @@ public class NotificationProcessingService {
     }
 
     private void processRequest(NotificationRequestEvent event) throws Exception {
-        if (!canSend(event.recipient(), event.type())) {
-            log.warn("Rate limit exceeded");
+        if (event.sendPush()) {
+            sendToProvider(event, "PUSH");
+        }
+        if (event.sendEmail()) {
+            sendToProvider(event, "EMAIL");
+        }
+        // Fallback or legacy behavior if neither flag is explicit, rely on 'type' if
+        // present
+        if (!event.sendPush() && !event.sendEmail() && event.type() != null) {
+            sendToProvider(event, event.type());
+        }
+    }
+
+    private void sendToProvider(NotificationRequestEvent event, String type) throws Exception {
+        if (!canSend(event.recipient(), type)) {
+            log.warn("Rate limit exceeded for {}", type);
             publishAnalytics(event, "RATE_LIMITED", null);
             return;
         }
 
-        Notification notification = createNotification(event);
+        Notification notification = createNotification(event, type);
         notification = notificationRepository.save(notification);
 
         try {
-            NotificationProvider provider = providers.get(event.type());
-            if (provider == null)
-                throw new IllegalStateException("No provider: " + event.type());
+            NotificationProvider provider = providers.get(type);
+            if (provider == null) {
+                // For EMAIL, if we don't have a provider keyed by "EMAIL", checking keys.
+                // Assuming provider map has keys "PUSH", "EMAIL".
+                log.warn("No provider found for type: {}", type);
+                throw new IllegalStateException("No provider: " + type);
+            }
 
             provider.send(event, notification);
             updateStatus(notification, "SENT", null);
             publishAnalytics(event, "SENT", null);
-            meterRegistry.counter("notification.sent", "type", event.type()).increment();
+            meterRegistry.counter("notification.sent", "type", type).increment();
 
         } catch (Exception e) {
-            log.error("Send failed processing event {}", event.eventId(), e);
+            log.error("Send failed processing event {} for type {}", event.eventId(), type, e);
             updateStatus(notification, "FAILED", e.getMessage());
             try {
                 publishAnalytics(event, "FAILED", e.getMessage());
             } catch (Exception analyticsEx) {
                 log.error("Failed to publish failure analytics for event {}", event.eventId(), analyticsEx);
             }
-            meterRegistry.counter("notification.failed", "type", event.type()).increment();
+            meterRegistry.counter("notification.failed", "type", type).increment();
+            // We verify if we should throw exception. If one fails, we might still want the
+            // other to succeed.
+            // But 'process' method retries on exception.
+            // For now, logging error but propagating might cause retry of BOTH?
+            // Idempotency check handle duplicates, so retry is safer.
             throw e;
         }
     }
@@ -165,11 +187,11 @@ public class NotificationProcessingService {
         return true;
     }
 
-    private Notification createNotification(NotificationRequestEvent event) {
+    private Notification createNotification(NotificationRequestEvent event, String type) {
         Notification n = new Notification();
         n.setEventId(event.eventId());
         n.setUserId(event.userId());
-        n.setType(event.type());
+        n.setType(type);
         n.setRecipient(event.recipient());
         n.setTemplateName(event.templateName());
         n.setStatus("PENDING");

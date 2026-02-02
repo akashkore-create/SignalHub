@@ -1,6 +1,5 @@
 package com.khetisetu.event.notifications.provider;
 
-import com.khetisetu.event.notifications.provider.EmailSender;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import okhttp3.*;
 import org.json.JSONObject;
