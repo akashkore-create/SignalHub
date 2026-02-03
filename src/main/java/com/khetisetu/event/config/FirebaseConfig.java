@@ -6,57 +6,70 @@ import com.google.firebase.FirebaseOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
 import org.springframework.util.StringUtils;
 
-import javax.annotation.PostConstruct;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 
 @Configuration
 public class FirebaseConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(FirebaseConfig.class);
 
-    @Value("classpath:firebase-adminsdk.json")
-    private Resource serviceAccountResource;
+    @Value("${firebase.project-id:}")
+    private String projectId;
 
-    @Value("${firebase.credentials.path:}")
-    private String credentialsPath;
+    @Value("${firebase.client-email:}")
+    private String clientEmail;
 
-    @PostConstruct
-    public void initialize() {
+    @Value("${firebase.private-key:}")
+    private String privateKey;
+
+    @Bean
+    public FirebaseApp firebaseApp() {
         if (!FirebaseApp.getApps().isEmpty()) {
             logger.info("Firebase Application already initialized");
-            return;
+            return FirebaseApp.getInstance();
         }
 
         try {
-            InputStream serviceAccount = null;
+            GoogleCredentials credentials;
 
-            if (StringUtils.hasText(credentialsPath)) {
-                logger.info("Loading Firebase credentials from path: {}", credentialsPath);
-                serviceAccount = new FileInputStream(credentialsPath);
-            } else if (serviceAccountResource.exists()) {
-                logger.info("Loading Firebase credentials from classpath: firebase-adminsdk.json");
-                serviceAccount = serviceAccountResource.getInputStream();
+            if (StringUtils.hasText(privateKey)) {
+                logger.info("Loading Firebase credentials from properties (Project ID: {})", projectId);
+                String formattedKey = privateKey.replace("\\n", "\n");
+                credentials = GoogleCredentials.fromStream(new java.io.ByteArrayInputStream(
+                        createGoogleCredentialsJson(projectId, clientEmail, formattedKey).getBytes()));
             } else {
-                logger.warn(
-                        "No Firebase credentials found (firebase-adminsdk.json). Push notifications will fail if attempted.");
-                return;
+                logger.warn("No Firebase private key found in environment variables. Push notifications may fail.");
+                return null;
             }
 
             FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                    .setCredentials(credentials)
                     .build();
 
-            FirebaseApp.initializeApp(options);
-            logger.info("Firebase Application initialized successfully");
+            return FirebaseApp.initializeApp(options);
 
         } catch (IOException e) {
             logger.error("Failed to initialize Firebase: {}", e.getMessage());
+            return null;
         }
+    }
+
+    private String createGoogleCredentialsJson(String projectId, String clientEmail, String privateKey) {
+        return String.format(
+                "{\n" +
+                        "  \"type\": \"service_account\",\n" +
+                        "  \"project_id\": \"%s\",\n" +
+                        "  \"private_key\": \"%s\",\n" +
+                        "  \"client_email\": \"%s\",\n" +
+                        "  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n" +
+                        "  \"token_uri\": \"https://oauth2.googleapis.com/token\",\n" +
+                        "  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n" +
+                        "  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%%40%s.iam.gserviceaccount.com\"\n"
+                        + "}",
+                projectId, privateKey.replace("\n", "\\n"), clientEmail, projectId);
     }
 }
