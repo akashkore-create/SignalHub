@@ -33,11 +33,14 @@ public class PushNotificationProvider implements NotificationProvider {
         String token = userTokenService.getFcmToken(event.recipient());
 
         if (token == null) {
-            log.warn("No FCM token found for user: {}", event.recipient());
-            // We might not want to throw exception here to avoid infinite retries if the
-            // user just doesn't have a token.
-            // But for now, let's keep it consistent or throw a specific exception.
-            throw new IllegalArgumentException("No FCM token found for user: " + event.recipient());
+            log.warn("No FCM token found for user: {}. Skipping push notification.", event.recipient());
+            // Instead of throwing exception, we just mark as skipped/failed in DB and
+            // return.
+            // This prevents blocking other channels like EMAIL if this was part of a
+            // multi-channel request.
+            notificationRecord.setStatus("SKIPPED");
+            notificationRecord.setErrorMessage("No FCM token found");
+            return;
         }
 
         String title = event.params().getOrDefault("title", "Notification");
