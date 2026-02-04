@@ -88,16 +88,40 @@ public class NotificationProcessingService {
     }
 
     private void processRequest(NotificationRequestEvent event) throws Exception {
+        boolean pushAttempted = false;
+        boolean emailAttempted = false;
+        Exception lastException = null;
+
         if (event.sendPush()) {
-            sendToProvider(event, "PUSH");
+            pushAttempted = true;
+            try {
+                sendToProvider(event, "PUSH");
+            } catch (Exception e) {
+                log.error("Failed to send PUSH for event {}: {}", event.eventId(), e.getMessage());
+                lastException = e;
+            }
         }
+
         if (event.sendEmail()) {
-            sendToProvider(event, "EMAIL");
+            emailAttempted = true;
+            try {
+                sendToProvider(event, "EMAIL");
+            } catch (Exception e) {
+                log.error("Failed to send EMAIL for event {}: {}", event.eventId(), e.getMessage());
+                lastException = e;
+            }
         }
+
         // Fallback or legacy behavior if neither flag is explicit, rely on 'type' if
         // present
-        if (!event.sendPush() && !event.sendEmail() && event.type() != null) {
+        if (!pushAttempted && !emailAttempted && event.type() != null) {
             sendToProvider(event, event.type());
+        } else if (lastException != null) {
+            // If both were attempted and at least one failed, we might want to propagate if
+            // we want Kafka retry.
+            // But if one SUCCEEDED, a retry would duplicate the success.
+            // Idempotency handles duplicates, so re-throwing is generally safer.
+            throw lastException;
         }
     }
 
@@ -114,8 +138,6 @@ public class NotificationProcessingService {
         try {
             NotificationProvider provider = providers.get(type);
             if (provider == null) {
-                // For EMAIL, if we don't have a provider keyed by "EMAIL", checking keys.
-                // Assuming provider map has keys "PUSH", "EMAIL".
                 log.warn("No provider found for type: {}", type);
                 throw new IllegalStateException("No provider: " + type);
             }
@@ -134,11 +156,6 @@ public class NotificationProcessingService {
                 log.error("Failed to publish failure analytics for event {}", event.eventId(), analyticsEx);
             }
             meterRegistry.counter("notification.failed", "type", type).increment();
-            // We verify if we should throw exception. If one fails, we might still want the
-            // other to succeed.
-            // But 'process' method retries on exception.
-            // For now, logging error but propagating might cause retry of BOTH?
-            // Idempotency check handle duplicates, so retry is safer.
             throw e;
         }
     }
