@@ -227,6 +227,8 @@ public class NotificationProcessingService {
         n.setStatus("PENDING");
         n.setRetryCount(0);
         n.setMetadata(event.metadata());
+        n.setCreatedAt(Instant.now());
+        n.setUpdatedAt(Instant.now());
         return n;
     }
 
