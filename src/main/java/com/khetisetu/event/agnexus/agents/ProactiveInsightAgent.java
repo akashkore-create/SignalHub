@@ -8,13 +8,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class ProactiveInsightAgent implements AgentNode {
 
     private final AgentGraphEngine engine;
+
+    public ProactiveInsightAgent(@Lazy AgentGraphEngine engine) {
+        this.engine = engine;
+    }
 
     @Override
     public String getName() {
