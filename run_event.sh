@@ -1,4 +1,4 @@
 #!/bin/bash
 echo "Starting Event Service..."
-cd /Users/akashkore/IdeaProjects/event
+cd D:/develop/project/SignalHub
 mvn spring-boot:run
