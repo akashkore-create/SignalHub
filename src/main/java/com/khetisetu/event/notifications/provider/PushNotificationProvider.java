@@ -138,10 +138,27 @@ public class PushNotificationProvider implements NotificationProvider {
                 .setFcmOptions(WebpushFcmOptions.withLink(clickUrl != null ? clickUrl : "/"))
                 .build());
 
-        // Android Config — HIGH priority only, no notification payload
-        // (notification display is handled by the service worker via data payload)
+        // Android Config — HIGH priority with notification payload for native Android apps.
+        // Native Android apps need a 'notification' payload to auto-display push notifications.
+        // The data payload is also sent for custom handling in onMessageReceived().
+        AndroidNotification.Builder androidNotifBuilder = AndroidNotification.builder()
+                .setTitle(title)
+                .setBody(body)
+                .setIcon("ic_notification")
+                .setSound("default")
+                .setChannelId("khetisetu_notifications")
+                .setClickAction("FLUTTER_NOTIFICATION_CLICK");
+
+        if (image != null && !image.isBlank()) {
+            androidNotifBuilder.setImage(image);
+        }
+        if (tag != null && !tag.isBlank()) {
+            androidNotifBuilder.setTag(tag);
+        }
+
         multicastBuilder.setAndroidConfig(AndroidConfig.builder()
                 .setPriority(AndroidConfig.Priority.HIGH)
+                .setNotification(androidNotifBuilder.build())
                 .build());
 
         try {
