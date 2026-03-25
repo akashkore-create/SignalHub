@@ -10,7 +10,7 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 
 @Configuration
 @EnableMongoRepositories(
-    basePackages = "com.khetisetu.app.logs.repository",
+    basePackages = "com.khetisetu.event.logs.repository",
     mongoTemplateRef = "logsMongoTemplate"
 )
 public class LogsMongoConfig {

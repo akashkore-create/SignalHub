@@ -1,6 +1,7 @@
 // src/main/java/com/khetisetu/event/notifications/config/KafkaConsumerConfig.java
 package com.khetisetu.event.notifications.config;
 
+import com.khetisetu.event.logs.dto.LogEvent;
 import com.khetisetu.event.notifications.consumer.DlqHandler;
 import com.khetisetu.event.notifications.dto.NotificationEvent;
 import com.khetisetu.event.notifications.dto.NotificationRequestEvent;
@@ -69,7 +70,6 @@ public class KafkaConsumerConfig {
         factory.setConcurrency(6);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(dlqHandler);
-//        factory.setErrorHandler(dlqHandler);
         return factory;
     }
 
@@ -91,6 +91,26 @@ public class KafkaConsumerConfig {
         var factory = new ConcurrentKafkaListenerContainerFactory<String, Object>();
         factory.setConsumerFactory(analyticsConsumerFactory());
         factory.setConcurrency(2);
+        return factory;
+    }
+
+    // LOG EVENTS: LogEvent from main backend
+    @Bean
+    public ConsumerFactory<String, LogEvent> logConsumerFactory() {
+        Map<String, Object> props = baseProps("log-consumer-group");
+        return new DefaultKafkaConsumerFactory<>(
+                props,
+                new StringDeserializer(),
+                new JsonDeserializer<>(LogEvent.class, false)
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, LogEvent> logFactory() {
+        var factory = new ConcurrentKafkaListenerContainerFactory<String, LogEvent>();
+        factory.setConsumerFactory(logConsumerFactory());
+        factory.setConcurrency(2);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         return factory;
     }
 
