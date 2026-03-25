@@ -79,22 +79,21 @@ public class PushNotificationProvider implements NotificationProvider {
         notificationRecord.setSubject(title);
         notificationRecord.setContent(body);
 
-        // Build rich notification with optional image and icon
-        Notification.Builder notifBuilder = Notification.builder()
-                .setTitle(title)
-                .setBody(body);
+        // DATA-ONLY FCM message: No top-level 'notification' payload.
+        // Our FCM tokens are web push tokens (from browser Firebase SDK).
+        // Sending a 'notification' payload to web push tokens causes TWA apps
+        // to silently drop or misroute notifications. Instead, we put everything
+        // in the 'data' payload and let the service worker (sw.js) handle display.
 
         String image = event.params().get("image");
-        if (image != null && !image.isBlank()) {
-            notifBuilder.setImage(image);
-        }
+        String clickUrl = event.params().get("clickUrl");
+        String tag = event.params().get("tag");
 
-        // Build multicast message for batch delivery
+        // Build multicast message with data-only payload
         MulticastMessage.Builder multicastBuilder = MulticastMessage.builder()
-                .setNotification(notifBuilder.build())
                 .addAllTokens(tokens);
 
-        // Add all params as data payload (for sw.js click handling)
+        // Add all params as data payload (for sw.js push handler)
         if (event.params() != null) {
             event.params().forEach((k, v) -> {
                 if (v != null)
@@ -102,18 +101,21 @@ public class PushNotificationProvider implements NotificationProvider {
             });
         }
 
-        // Add clickUrl as data if present
-        String clickUrl = event.params().get("clickUrl");
+        // Ensure title, body, and url are always in data payload
+        multicastBuilder.putData("title", title);
+        multicastBuilder.putData("body", body);
         if (clickUrl != null) {
             multicastBuilder.putData("url", clickUrl);
         }
+        if (image != null && !image.isBlank()) {
+            multicastBuilder.putData("image", image);
+        }
 
-        // Ensure title and body are in data payload for SW compatibility
-        multicastBuilder.putData("title", title);
-        multicastBuilder.putData("body", body);
+        // Webpush Config — controls how the browser receives the push
+        WebpushNotification.Builder webpushNotif = WebpushNotification.builder()
+                .setTitle(title)
+                .setBody(body);
 
-        // Webpush Config for Icons, Badges, and Tags
-        WebpushNotification.Builder webpushNotif = WebpushNotification.builder();
         String icon = event.params().get("icon");
         if (icon != null && !icon.isBlank()) {
             webpushNotif.setIcon(icon);
@@ -126,7 +128,6 @@ public class PushNotificationProvider implements NotificationProvider {
             webpushNotif.setBadge(badge);
         }
 
-        String tag = event.params().get("tag");
         if (tag != null && !tag.isBlank()) {
             webpushNotif.setTag(tag);
         }
@@ -137,15 +138,10 @@ public class PushNotificationProvider implements NotificationProvider {
                 .setFcmOptions(WebpushFcmOptions.withLink(clickUrl != null ? clickUrl : "/"))
                 .build());
 
-        // Android Config for High Priority and Tags
+        // Android Config — HIGH priority only, no notification payload
+        // (notification display is handled by the service worker via data payload)
         multicastBuilder.setAndroidConfig(AndroidConfig.builder()
-                .setPriority(AndroidConfig.Priority.HIGH) // High priority for background delivery
-                .setNotification(AndroidNotification.builder()
-                        .setColor("#2e7d32")
-                        .setSound("default")
-                        .setDefaultSound(true)
-                        .setTag(tag)
-                        .build())
+                .setPriority(AndroidConfig.Priority.HIGH)
                 .build());
 
         try {
