@@ -156,20 +156,37 @@ public class NotificationProcessingService {
             updateStatus(notification, "SENT", null);
             publishAnalytics(event, "SENT", null);
             meterRegistry.counter("notification.sent", "type", type).increment();
-            Actor actor = new Actor(event.userId(), USER);
-            Entity entity = new Entity(event.eventId(), "NOTIFICATION_EVENT");
-            logService.storeLog(actor, event.type() + NOTIFICATION, entity, "Successfully publish event.", INFO);
+
+            // Enriched log: show who received what via which provider
+            String title = event.params() != null ? event.params().getOrDefault("title", "N/A") : "N/A";
+            String body = event.params() != null ? event.params().getOrDefault("body", "") : "";
+            String bodyPreview = body.length() > 60 ? body.substring(0, 60) + "..." : body;
+
+            Actor actor = new Actor(event.recipient(), event.recipient());
+            Entity entity = new Entity(notification.getId(), type + " → " + event.recipient());
+            String details = String.format("[%s] Sent to %s | Title: \"%s\" | Body: \"%s\" | Template: %s | EventId: %s",
+                    type, event.recipient(), title, bodyPreview,
+                    event.templateName() != null ? event.templateName() : "none",
+                    event.eventId());
+            logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, INFO);
 
         } catch (Exception e) {
             log.error("Send failed processing event {} for type {}", event.eventId(), type, e);
-            Actor actor = new Actor(event.userId(), USER);
-            Entity entity = new Entity(event.eventId(), "NOTIFICATION_EVENT");
-            logService.storeLog(actor, event.type() + NOTIFICATION, entity, "Failed to publish event", ERROR);
+
+            String title = event.params() != null ? event.params().getOrDefault("title", "N/A") : "N/A";
+            Actor actor = new Actor(event.recipient(), event.recipient());
+            Entity entity = new Entity(notification.getId(), type + " → " + event.recipient());
+            String details = String.format("[%s] FAILED for %s | Title: \"%s\" | Error: %s | EventId: %s",
+                    type, event.recipient(), title,
+                    e.getMessage() != null ? e.getMessage() : "Unknown error",
+                    event.eventId());
+            logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, ERROR);
+
             updateStatus(notification, "FAILED", e.getMessage());
             try {
                 publishAnalytics(event, "FAILED", e.getMessage());
             } catch (Exception analyticsEx) {
-                logService.storeLog(actor, "ANALYTICS_EVENT", entity, "Failed to publish Analytic event", ERROR);
+                logService.storeLog(actor, "ANALYTICS_EVENT", entity, "Failed to publish analytics: " + analyticsEx.getMessage(), ERROR);
                 log.error("Failed to publish failure analytics for event {}", event.eventId(), analyticsEx);
             }
             meterRegistry.counter("notification.failed", "type", type).increment();
