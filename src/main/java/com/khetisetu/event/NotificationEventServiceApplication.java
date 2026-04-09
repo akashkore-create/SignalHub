@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 @SpringBootApplication(exclude = { DataSourceAutoConfiguration.class })
 @EnableAsync
 @EnableCaching
-@EnableMongoRepositories(basePackages = "com.khetisetu.event.notifications.repository")
 @RestController
 public class NotificationEventServiceApplication {
 	public static void main(String[] args) {
