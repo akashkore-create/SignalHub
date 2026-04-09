@@ -7,16 +7,22 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
 /**
  * Primary MongoDB configuration for the main khetisetu database.
  * Provides the default {@code mongoTemplate} bean used by repositories
  * like {@link com.khetisetu.event.notifications.repository.NotificationRepository}.
- *
- * <p>This is needed because {@link LogsMongoConfig} defines a custom MongoClient,
- * which prevents Spring Boot from auto-configuring the default mongoTemplate.</p>
  */
 @Configuration
+@EnableMongoRepositories(
+    basePackages = {
+        "com.khetisetu.event.notifications.repository",
+        "com.khetisetu.event.agnexus.memory",
+        "com.khetisetu.event.agnexus.rag"
+    },
+    mongoTemplateRef = "mongoTemplate"
+)
 public class PrimaryMongoConfig {
 
     @Value("${spring.data.mongodb.uri}")
