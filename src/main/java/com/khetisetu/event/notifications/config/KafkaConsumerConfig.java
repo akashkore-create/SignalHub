@@ -14,8 +14,11 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -111,6 +114,13 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(logConsumerFactory());
         factory.setConcurrency(2);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        // Retry transient persistence failures 3 times with 1s backoff, then log and
+        // skip the record so a poison message can't block the partition forever.
+        var errorHandler = new DefaultErrorHandler(
+                (record, ex) -> LoggerFactory.getLogger(KafkaConsumerConfig.class)
+                        .error("Dropping unprocessable log event after retries: {}", record.value(), ex),
+                new FixedBackOff(1000L, 3));
+        factory.setCommonErrorHandler(errorHandler);
         return factory;
     }
 
