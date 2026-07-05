@@ -1,11 +1,11 @@
 package com.khetisetu.event.logs.service;
 
-import com.khetisetu.event.logs.repository.LogRepository;
+import com.khetisetu.event.logs.LogCategory;
 import com.khetisetu.event.notifications.model.logs.Actor;
 import com.khetisetu.event.notifications.model.logs.Entity;
 import com.khetisetu.event.notifications.model.logs.Log;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
@@ -20,28 +20,32 @@ import java.time.Instant;
 @Slf4j
 public class LogService {
 
-    private final LogRepository logRepository;
     private final MongoTemplate mongoTemplate;
 
-    public LogService(LogRepository logRepository,
-                      @Qualifier("logsMongoTemplate") MongoTemplate mongoTemplate) {
-        this.logRepository = logRepository;
+    public LogService(@Qualifier("logsMongoTemplate") MongoTemplate mongoTemplate) {
         this.mongoTemplate = mongoTemplate;
     }
 
     /**
-     * Stores a log entry in the khetisetu-logs database.
-     *
-     * @param actor      Actor performing the action
-     * @param action     Action type
-     * @param entity     Affected entity
-     * @param logDetails Log details
-     * @param level      Log level (INFO, WARN, ERROR)
+     * Persists a fully-populated log entry. The id is left null so MongoDB assigns
+     * a unique ObjectId (the previous "LOG" + currentTimeMillis scheme collided
+     * under concurrent writes).
+     */
+    public Log store(Log entry) {
+        if (entry.getTimestamp() == null) entry.setTimestamp(Instant.now());
+        if (entry.getCategory() == null) entry.setCategory(LogCategory.fromAction(entry.getAction()));
+        if (entry.getService() == null) entry.setService("notification-event-service");
+        if (entry.getTraceId() == null) entry.setTraceId(MDC.get("traceId"));
+        Log saved = mongoTemplate.save(entry, "logs");
+        log.debug("Log stored: id={}, action={}, level={}", saved.getId(), entry.getAction(), entry.getLevel());
+        return saved;
+    }
+
+    /**
+     * Legacy convenience overload for internal callers.
      */
     public void storeLog(Actor actor, String action, Entity entity, String logDetails, String level) {
-        String id = "LOG" + System.currentTimeMillis();
-        Log logEntry = new Log(id, Instant.now(), level, actor, action, entity, logDetails);
-        Log saved = mongoTemplate.save(logEntry, "logs");
-        log.debug("Log stored: id={}, action={}, level={}", saved.getId(), action, level);
+        Log entry = new Log(null, Instant.now(), level, actor, action, entity, logDetails);
+        store(entry);
     }
 }

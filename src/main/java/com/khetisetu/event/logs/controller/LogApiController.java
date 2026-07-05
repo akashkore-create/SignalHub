@@ -1,14 +1,18 @@
 package com.khetisetu.event.logs.controller;
 
-import com.khetisetu.event.logs.repository.LogRepository;
+import com.khetisetu.event.logs.service.LogQueryService;
 import com.khetisetu.event.notifications.model.logs.Log;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * REST API controller for log read operations.
@@ -22,38 +26,69 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 public class LogApiController {
 
-    private final LogRepository logRepository;
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_STATS_WINDOW_HOURS = 24 * 30;
+
+    private final LogQueryService logQueryService;
 
     /**
-     * Gets paginated logs, filterable by action prefix, level, and search term.
+     * Gets paginated logs with structured filters.
      *
-     * @param actionPrefix optional action prefix filter (e.g., "EQUIPMENT_", "ORDER_")
-     * @param level        optional log level filter (INFO, WARN, ERROR)
-     * @param search       optional text search in log details
-     * @param page         page number (0-indexed)
-     * @param size         page size
+     * @param category     optional comma-separated categories (USER, ORDER, BOOKING, ...)
+     * @param actionPrefix optional literal action prefix (e.g., "EQUIPMENT_")
+     * @param level        optional comma-separated log levels
+     * @param search       optional text search across details/action/actor/entity/traceId
+     * @param actorId      optional exact actor id
+     * @param from,to      optional ISO-8601 instants bounding the time window
      */
     @GetMapping
     public ResponseEntity<Page<Log>> getLogs(
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) String actionPrefix,
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String actorId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        var pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("timestamp")));
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safePage = Math.max(page, 0);
 
-        String actionRegex = actionPrefix != null ? actionPrefix : ".*";
-        String[] levels = level != null ? new String[]{level} : new String[]{"INFO", "WARN", "ERROR"};
-
-        Page<Log> logs;
-        if (search != null && !search.isEmpty()) {
-            logs = logRepository.findByDetailsRegexAndActionRegexAndLevelIn(search, actionRegex, levels, pageable);
-        } else {
-            logs = logRepository.findByActionRegexAndLevelIn(actionRegex, levels, pageable);
+        List<String> categories = splitParam(category);
+        List<String> levels = splitParam(level);
+        if (levels.isEmpty()) {
+            levels = List.of("INFO", "WARN", "ERROR", "FATAL");
         }
 
-        log.debug("Fetched {} logs, page {}", logs.getNumberOfElements(), page);
+        Page<Log> logs = logQueryService.search(
+                categories, actionPrefix, levels, search, actorId, from, to,
+                PageRequest.of(safePage, safeSize));
+
+        log.debug("Fetched {} logs, page {}", logs.getNumberOfElements(), safePage);
         return ResponseEntity.ok(logs);
+    }
+
+    /**
+     * Aggregated statistics for the admin logs dashboard.
+     *
+     * @param hours lookback window in hours (default 24, capped at 30 days)
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getStats(
+            @RequestParam(defaultValue = "24") int hours,
+            @RequestParam(required = false) String category) {
+        int safeHours = Math.min(Math.max(hours, 1), MAX_STATS_WINDOW_HOURS);
+        return ResponseEntity.ok(logQueryService.stats(safeHours, splitParam(category)));
+    }
+
+    private List<String> splitParam(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(String::toUpperCase)
+                .toList();
     }
 }

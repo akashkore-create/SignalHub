@@ -1,18 +1,26 @@
 package com.khetisetu.event.logs.consumer;
 
+import com.khetisetu.event.logs.LogCategory;
 import com.khetisetu.event.logs.dto.LogEvent;
 import com.khetisetu.event.logs.service.LogService;
 import com.khetisetu.event.notifications.model.logs.Actor;
 import com.khetisetu.event.notifications.model.logs.Entity;
+import com.khetisetu.event.notifications.model.logs.Log;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+
 /**
  * Kafka consumer for application log events published by the main khetisetu backend.
  * Persists log entries to the khetisetu-logs MongoDB database.
+ *
+ * <p>Failures are rethrown so the container's error handler (configured on
+ * {@code logFactory}) retries with backoff and finally skips + logs poison messages,
+ * instead of blocking the partition forever.</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -21,32 +29,29 @@ public class LogConsumer {
 
     private final LogService logService;
 
-    /**
-     * Consumes log events from the 'application-logs' Kafka topic and persists them
-     * to the khetisetu-logs database via {@link LogService}.
-     *
-     * @param event the log event to persist
-     * @param ack   manual acknowledgment handle
-     */
     @KafkaListener(
             topics = "application-logs",
             groupId = "log-consumer-group",
             containerFactory = "logFactory"
     )
     public void consumeLogEvent(LogEvent event, Acknowledgment ack) {
-        try {
-            log.debug("Received log event: action={}, level={}", event.action(), event.level());
+        log.debug("Received log event: action={}, level={}", event.action(), event.level());
 
-            var actor = new Actor(event.actorId(), event.actorName());
-            var entity = new Entity(event.entityId(), event.entityName());
+        Log entry = new Log();
+        // Prefer the producer's timestamp so the log reflects when the event actually
+        // happened, not when it was consumed (consumer lag would otherwise skew it).
+        entry.setTimestamp(event.timestamp() != null ? event.timestamp() : Instant.now());
+        entry.setLevel(event.level());
+        entry.setActor(new Actor(event.actorId(), event.actorName()));
+        entry.setAction(event.action());
+        entry.setEntity(new Entity(event.entityId(), event.entityName()));
+        entry.setDetails(event.details());
+        entry.setCategory(event.category() != null ? event.category() : LogCategory.fromAction(event.action()));
+        entry.setService(event.service() != null ? event.service() : "khetisetu-core");
+        entry.setTraceId(event.traceId());
+        entry.setMetadata(event.metadata());
 
-            logService.storeLog(actor, event.action(), entity, event.details(), event.level());
-            ack.acknowledge();
-
-            log.debug("Persisted log event: action={}", event.action());
-        } catch (Exception e) {
-            log.error("Failed to process log event: action={}, error={}", event.action(), e.getMessage(), e);
-            // Don't ack — message will be retried by Kafka
-        }
+        logService.store(entry);
+        ack.acknowledge();
     }
 }
