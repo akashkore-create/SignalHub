@@ -1,6 +1,7 @@
 package com.khetisetu.event.notifications.provider;
 
 import com.google.firebase.messaging.*;
+import com.khetisetu.event.notifications.service.NotificationTemplateService;
 import com.khetisetu.event.notifications.dto.NotificationRequestEvent;
 import com.khetisetu.event.notifications.model.Notification;
 import com.khetisetu.event.notifications.service.UserTokenService;
@@ -29,13 +30,16 @@ class PushNotificationProviderTest {
     @Mock
     private UserTokenService userTokenService;
 
+    @Mock
+    private NotificationTemplateService templateService;
+
     private MeterRegistry meterRegistry;
     private PushNotificationProvider provider;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        provider = new PushNotificationProvider(userTokenService, meterRegistry);
+        provider = new PushNotificationProvider(userTokenService, templateService, meterRegistry);
     }
 
     @Test
