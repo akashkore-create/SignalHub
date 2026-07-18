@@ -36,3 +36,7 @@ build/
 .vscode/
 src/main/resources/firebase-adminsdk.json
 .env
+
+# Ignore python files
+*.py
+
