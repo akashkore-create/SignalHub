@@ -61,7 +61,7 @@ public class NotificationProcessingService {
 
         log.info("Processing direct notification");
 
-        if (isAlreadyProcessed(eventId)) {
+        if (!acquireIdempotencyLock(eventId)) {
             log.info("Duplicate direct event");
             MDC.clear();
             return;
@@ -69,7 +69,6 @@ public class NotificationProcessingService {
 
         NotificationRequestEvent req = toRequestEvent(event, eventId, userId);
         processRequest(req);
-        markAsProcessed(eventId);
         MDC.clear();
     }
 
@@ -86,14 +85,13 @@ public class NotificationProcessingService {
 
         log.info("Processing rule-based notification");
 
-        if (isAlreadyProcessed(event.eventId())) {
+        if (!acquireIdempotencyLock(event.eventId())) {
             log.info("Duplicate rule event");
             MDC.clear();
             return;
         }
 
         processRequest(event);
-        markAsProcessed(event.eventId());
         MDC.clear();
     }
 
@@ -209,39 +207,29 @@ public class NotificationProcessingService {
                 .build();
     }
 
-    private boolean isAlreadyProcessed(String eventId) {
+    private boolean acquireIdempotencyLock(String eventId) {
         try {
-            return redisTemplate.hasKey(String.format(IDEMPOTENCY_KEY, eventId));
+            String key = String.format(IDEMPOTENCY_KEY, eventId);
+            Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", 24, TimeUnit.HOURS);
+            return Boolean.TRUE.equals(isNew);
         } catch (Exception e) {
             log.warn("Redis unavailable for idempotency check (eventId={}). Proceeding anyway.", eventId);
-            return false; // Allow processing when Redis is down
-        }
-    }
-
-    private void markAsProcessed(String eventId) {
-        try {
-            redisTemplate.opsForValue().set(String.format(IDEMPOTENCY_KEY, eventId), "1", 24, TimeUnit.HOURS);
-        } catch (Exception e) {
-            Actor actor = new Actor("", "SYSTEM");
-            Entity entity = new Entity(eventId, "REDIS_IDEMPOTENCY");
-            logService.storeLog(actor, "REDIS_UPDATE", entity, "Failed to update redis cache so skipping", ERROR);
-            log.warn("Redis unavailable for marking processed (eventId={}). Skipping.", eventId);
+            return true; // Allow processing when Redis is down
         }
     }
 
     private boolean canSend(String recipient, String type) {
         try {
             String key = "rate:notif:" + recipient + ":" + type;
-            String val = redisTemplate.opsForValue().get(key);
-            long count = val == null ? 0 : Long.parseLong(val);
-            if (count >= 5)
-                return false;
-            redisTemplate.opsForValue().increment(key);
-            redisTemplate.expire(key, 60, TimeUnit.SECONDS);
+            Long count = redisTemplate.opsForValue().increment(key);
+            if (count != null && (count == 1 || redisTemplate.getExpire(key) < 0)) {
+                redisTemplate.expire(key, 60, TimeUnit.SECONDS);
+            }
+            return count == null || count <= 5;
         } catch (Exception e) {
             log.warn("Redis unavailable for rate limiting ({}/{}). Allowing send.", recipient, type);
+            return true;
         }
-        return true;
     }
 
     private Notification createNotification(NotificationRequestEvent event, String type) {
