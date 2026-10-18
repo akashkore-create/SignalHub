@@ -35,13 +35,13 @@ public class KafkaSslConfig {
     @Value("${kafka.ssl-ca:}")
     private String sslCaProperty;
 
-    @Value("${kafka.username:}")
+    @Value("${kafka.username:${KAFKA_USERNAME:avnadmin}}")
     private String username;
 
-    @Value("${kafka.password:}")
+    @Value("${kafka.password:${KAFKA_PASSWORD:}}")
     private String password;
 
-    @Value("${kafka.sasl-mechanism:SCRAM-SHA-256}")
+    @Value("${kafka.sasl-mechanism:${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}}")
     private String saslMechanism;
 
     /**

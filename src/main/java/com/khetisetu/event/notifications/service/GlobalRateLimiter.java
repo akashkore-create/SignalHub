@@ -19,32 +19,33 @@ public class GlobalRateLimiter {
     private static final DateTimeFormatter DATES = DateTimeFormatter.ISO_DATE;
     private static final String KEY_PREFIX = "global:rate:";
 
-    // Lua script for atomic increment and expire
-    private static final String RATE_LIMIT_SCRIPT = "local current = redis.call('incr', KEYS[1]) " +
+    // Lua script for atomic increment and expire - compiled once to allow EVALSHA reuse in Redis
+    private static final String RATE_LIMIT_SCRIPT_TEXT = "local current = redis.call('incr', KEYS[1]) " +
             "if current == 1 then " +
             "   redis.call('expire', KEYS[1], ARGV[1]) " +
             "end " +
             "return current";
 
+    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT;
+
+    static {
+        RATE_LIMIT_SCRIPT = new DefaultRedisScript<>();
+        RATE_LIMIT_SCRIPT.setScriptText(RATE_LIMIT_SCRIPT_TEXT);
+        RATE_LIMIT_SCRIPT.setResultType(Long.class);
+    }
+
     public boolean tryAcquire(String type, int limit) {
         String key = getKey(type);
         try {
-            DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
-            redisScript.setScriptText(RATE_LIMIT_SCRIPT);
-            redisScript.setResultType(Long.class);
-
             // Expire in 25 hours (seconds)
             String expireSeconds = String.valueOf(25 * 3600);
 
-            Long current = redisTemplate.execute(redisScript, Collections.singletonList(key), expireSeconds);
+            Long current = redisTemplate.execute(RATE_LIMIT_SCRIPT, Collections.singletonList(key), expireSeconds);
 
             if (current == null)
                 return false;
 
-            if (current > limit) {
-                return false;
-            }
-            return true;
+            return current <= limit;
         } catch (Exception e) {
             log.error("Failed to access Redis for rate limiting", e);
             // Open fallback: allow if redis fails to avoid outage

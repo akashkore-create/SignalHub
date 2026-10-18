@@ -61,13 +61,31 @@ public class PushNotificationProvider implements NotificationProvider {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        try {
+            return FirebaseMessaging.getInstance() != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override
     public void send(NotificationRequestEvent event,
             com.khetisetu.event.notifications.model.Notification notificationRecord) {
+        FirebaseMessaging messaging;
+        try {
+            messaging = FirebaseMessaging.getInstance();
+        } catch (Exception e) {
+            log.warn("Firebase Messaging not initialized. Skipping push notification for {}: {}", event.recipient(), e.getMessage());
+            notificationRecord.setStatus("SKIPPED");
+            notificationRecord.setErrorMessage("Firebase not initialized");
+            skippedCounter.increment();
+            return;
+        }
+
         List<String> tokens = userTokenService.getFcmTokens(event.recipient());
+        if (tokens.isEmpty() && event.userId() != null && !event.userId().isBlank() && !event.userId().equals(event.recipient())) {
+            tokens = userTokenService.getFcmTokens(event.userId());
+        }
 
         if (tokens.isEmpty()) {
             log.warn("No FCM tokens found for user: {}. Skipping push.", event.recipient());
@@ -80,11 +98,12 @@ public class PushNotificationProvider implements NotificationProvider {
         // Prefer explicit title/body in params (direct/custom pushes). Otherwise
         // render the named template (e.g. "new_job") so trigger-based pushes carry
         // proper, localized text instead of a generic "Notification".
-        String title = event.params().get("title");
-        String body = event.params().get("body");
+        java.util.Map<String, String> params = event.params() != null ? event.params() : java.util.Map.of();
+        String title = params.get("title");
+        String body = params.get("body");
         if (title == null || title.isBlank() || body == null || body.isBlank()) {
             NotificationTemplateService.Content resolved = templateService.resolve(
-                    event.templateName(), event.language(), event.params());
+                    event.templateName(), event.language(), params);
             if (title == null || title.isBlank()) {
                 title = resolved.title();
             }
@@ -109,21 +128,19 @@ public class PushNotificationProvider implements NotificationProvider {
         // to silently drop or misroute notifications. Instead, we put everything
         // in the 'data' payload and let the service worker (sw.js) handle display.
 
-        String image = event.params().get("image");
-        String clickUrl = event.params().get("clickUrl");
-        String tag = event.params().get("tag");
+        String image = params.get("image");
+        String clickUrl = params.get("clickUrl");
+        String tag = params.get("tag");
 
         // Build multicast message with data-only payload
         MulticastMessage.Builder multicastBuilder = MulticastMessage.builder()
                 .addAllTokens(tokens);
 
         // Add all params as data payload (for sw.js push handler)
-        if (event.params() != null) {
-            event.params().forEach((k, v) -> {
-                if (v != null)
-                    multicastBuilder.putData(k, String.valueOf(v));
-            });
-        }
+        params.forEach((k, v) -> {
+            if (v != null)
+                multicastBuilder.putData(k, String.valueOf(v));
+        });
 
         // Ensure title, body, and url are always in data payload
         multicastBuilder.putData("title", title);
@@ -140,14 +157,14 @@ public class PushNotificationProvider implements NotificationProvider {
                 .setTitle(title)
                 .setBody(body);
 
-        String icon = event.params().get("icon");
+        String icon = params.get("icon");
         if (icon != null && !icon.isBlank()) {
             webpushNotif.setIcon(icon);
         } else {
             webpushNotif.setIcon("/icons/icon-192x192.png");
         }
 
-        String badge = event.params().get("badge");
+        String badge = params.get("badge");
         if (badge != null && !badge.isBlank()) {
             webpushNotif.setBadge(badge);
         }
@@ -186,7 +203,7 @@ public class PushNotificationProvider implements NotificationProvider {
                 .build());
 
         try {
-            BatchResponse batchResponse = FirebaseMessaging.getInstance()
+            BatchResponse batchResponse = messaging
                     .sendEachForMulticast(multicastBuilder.build());
 
             int successCount = batchResponse.getSuccessCount();

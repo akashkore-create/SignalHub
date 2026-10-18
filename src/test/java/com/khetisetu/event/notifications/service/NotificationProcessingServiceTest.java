@@ -19,6 +19,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -66,7 +67,11 @@ class NotificationProcessingServiceTest {
         service.logService = logService; // Inject mock log service
 
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
+        lenient().when(redisTemplate.getExpire(anyString())).thenReturn(60L);
         lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
+        lenient().when(kafkaTemplate.send(anyString(), any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
     }
 
     @Test
@@ -80,7 +85,6 @@ class NotificationProcessingServiceTest {
                 .sendEmail(true)
                 .build();
 
-        when(valueOperations.get(anyString())).thenReturn(null); // Rate limit null
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArguments()[0]);
 
         // Act
@@ -102,7 +106,6 @@ class NotificationProcessingServiceTest {
                 .sendEmail(true)
                 .build();
 
-        when(valueOperations.get(anyString())).thenReturn(null);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArguments()[0]);
 
         // Mock PUSH failure
@@ -140,7 +143,6 @@ class NotificationProcessingServiceTest {
                 .sendEmail(false)
                 .build();
 
-        when(valueOperations.get(anyString())).thenReturn(null);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArguments()[0]);
 
         // Act
