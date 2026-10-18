@@ -93,11 +93,21 @@ public class EmailProvider implements NotificationProvider {
             throw new RuntimeException("Daily email limit exceeded");
         }
 
-        // 1. Validate sender config
+        // 1. Validate sender config with safe fallback
         EmailSenderConfig senderConfig = event.senderConfig();
         if (senderConfig == null) {
-            log.error("Email sender config is null for event: {}", event);
-            throw new IllegalArgumentException("Email sender configuration is required");
+            log.warn("Email sender config is null for event: {}. Using default sender.", event.eventId());
+            senderConfig = new EmailSenderConfig();
+            senderConfig.setCategory("DEFAULT");
+            senderConfig.setSenderEmail("support@khetisetu.com");
+            senderConfig.setSenderName("KhetiSetu");
+        } else {
+            if (senderConfig.getSenderEmail() == null || senderConfig.getSenderEmail().isBlank()) {
+                senderConfig.setSenderEmail("support@khetisetu.com");
+            }
+            if (senderConfig.getSenderName() == null || senderConfig.getSenderName().isBlank()) {
+                senderConfig.setSenderName("KhetiSetu");
+            }
         }
 
         // 2. Render HTML template

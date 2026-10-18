@@ -28,10 +28,17 @@ public class UserTokenService {
      * `pushSubscription` field.
      */
     public List<String> getFcmTokens(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return List.of();
+        }
         Set<String> tokens = new LinkedHashSet<>(); // Deduplicate
 
         try {
-            Query query = new Query(Criteria.where("_id").is(userId));
+            Query query = new Query(new Criteria().orOperator(
+                    Criteria.where("_id").is(userId),
+                    Criteria.where("phone").is(userId),
+                    Criteria.where("email").is(userId)
+            ));
             query.fields().include("pushSubscription").include("pushSubscriptions");
             Map<String, Object> user = mongoTemplate.findOne(query, Map.class, "users");
 
@@ -124,7 +131,11 @@ public class UserTokenService {
             String tokenPrefix = staleToken.substring(0, Math.min(10, staleToken.length()));
             long totalRemoved = 0;
 
-            Query userQuery = new Query(Criteria.where("_id").is(userId));
+            Query userQuery = new Query(new Criteria().orOperator(
+                    Criteria.where("_id").is(userId),
+                    Criteria.where("phone").is(userId),
+                    Criteria.where("email").is(userId)
+            ));
 
             // Strategy 1: pull from pushSubscriptions[] where token field matches
             var result1 = mongoTemplate.updateFirst(userQuery,
@@ -151,11 +162,19 @@ public class UserTokenService {
             totalRemoved += result3.getModifiedCount();
 
             // Strategy 4: unset legacy pushSubscription if its token matches (any format)
-            Criteria legacyCriteria = Criteria.where("_id").is(userId).orOperator(
-                    Criteria.where("pushSubscription.token").is(staleToken),
-                    Criteria.where("pushSubscription.endpoint")
-                            .regex(".*" + java.util.regex.Pattern.quote(staleToken) + "$"),
-                    Criteria.where("pushSubscription.keys.fcm").is(staleToken));
+            Criteria idOrPhoneOrEmail = new Criteria().orOperator(
+                    Criteria.where("_id").is(userId),
+                    Criteria.where("phone").is(userId),
+                    Criteria.where("email").is(userId)
+            );
+            Criteria legacyCriteria = new Criteria().andOperator(
+                    idOrPhoneOrEmail,
+                    new Criteria().orOperator(
+                            Criteria.where("pushSubscription.token").is(staleToken),
+                            Criteria.where("pushSubscription.endpoint")
+                                    .regex(".*" + java.util.regex.Pattern.quote(staleToken) + "$"),
+                            Criteria.where("pushSubscription.keys.fcm").is(staleToken))
+            );
             var result4 = mongoTemplate.updateFirst(new Query(legacyCriteria),
                     new Update().unset("pushSubscription"), "users");
             totalRemoved += result4.getModifiedCount();

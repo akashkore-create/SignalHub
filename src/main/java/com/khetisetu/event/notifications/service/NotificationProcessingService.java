@@ -143,16 +143,15 @@ public class NotificationProcessingService {
         Notification notification = createNotification(event, type);
         notification = notificationRepository.save(notification);
 
-        try {
-            NotificationProvider provider = providers.get(type);
-            if (provider == null) {
-                log.warn("No provider found for type: {}", type);
-                throw new IllegalStateException("No provider: " + type);
-            }
+        NotificationProvider provider = providers.get(type);
+        if (provider == null) {
+            log.warn("No provider found for type: {}", type);
+            throw new IllegalStateException("No provider: " + type);
+        }
 
+        try {
             provider.send(event, notification);
             updateStatus(notification, "SENT", null);
-            publishAnalytics(event, "SENT", null);
             meterRegistry.counter("notification.sent", "type", type).increment();
 
             // Enriched log: show who received what via which provider
@@ -166,7 +165,17 @@ public class NotificationProcessingService {
                     type, event.recipient(), title, bodyPreview,
                     event.templateName() != null ? event.templateName() : "none",
                     event.eventId());
-            logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, INFO);
+            try {
+                logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, INFO);
+            } catch (Exception logEx) {
+                log.warn("Failed to store notification log: {}", logEx.getMessage());
+            }
+
+            try {
+                publishAnalytics(event, "SENT", null);
+            } catch (Exception analyticsEx) {
+                log.warn("Failed to publish success analytics: {}", analyticsEx.getMessage());
+            }
 
         } catch (Exception e) {
             log.error("Send failed processing event {} for type {}", event.eventId(), type, e);
@@ -178,14 +187,17 @@ public class NotificationProcessingService {
                     type, event.recipient(), title,
                     e.getMessage() != null ? e.getMessage() : "Unknown error",
                     event.eventId());
-            logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, ERROR);
+            try {
+                logService.storeLog(actor, event.type() + NOTIFICATION, entity, details, ERROR);
+            } catch (Exception logEx) {
+                log.warn("Failed to store failure log: {}", logEx.getMessage());
+            }
 
             updateStatus(notification, "FAILED", e.getMessage());
             try {
                 publishAnalytics(event, "FAILED", e.getMessage());
             } catch (Exception analyticsEx) {
-                logService.storeLog(actor, "ANALYTICS_EVENT", entity, "Failed to publish analytics: " + analyticsEx.getMessage(), ERROR);
-                log.error("Failed to publish failure analytics for event {}", event.eventId(), analyticsEx);
+                log.warn("Failed to publish failure analytics: {}", analyticsEx.getMessage());
             }
             meterRegistry.counter("notification.failed", "type", type).increment();
             throw e;
@@ -257,14 +269,25 @@ public class NotificationProcessingService {
     }
 
     private void publishAnalytics(NotificationRequestEvent event, String status, String error) {
-        var analytics = NotificationAnalyticsEvent.builder()
-                .eventId(event.eventId())
-                .userId(event.userId())
-                .type(event.type())
-                .status(status)
-                .error(error)
-                .sentAt(Instant.now())
-                .build();
-        kafkaTemplate.send("user-activity-analytics", analytics);
+        try {
+            var analytics = NotificationAnalyticsEvent.builder()
+                    .eventId(event.eventId())
+                    .userId(event.userId())
+                    .type(event.type())
+                    .status(status)
+                    .error(error)
+                    .sentAt(Instant.now())
+                    .build();
+            var future = kafkaTemplate.send("user-activity-analytics", analytics);
+            if (future != null) {
+                future.whenComplete((res, ex) -> {
+                    if (ex != null) {
+                        log.warn("Failed to publish user-activity-analytics event for {}: {}", event.eventId(), ex.getMessage());
+                    }
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("Could not initiate analytics publish for event {}: {}", event.eventId(), ex.getMessage());
+        }
     }
 }
